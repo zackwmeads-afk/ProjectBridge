@@ -1,0 +1,45 @@
+name: Build macOS apps
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify host architecture
+        run: |
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          xcodebuild -version
+      - name: Build native app
+        run: bash build-mac.sh
+      - name: Verify app structure
+        run: |
+          test -f dist/ProjectBridge.app/Contents/Info.plist
+          test -f dist/ProjectBridge.app/Contents/Resources/engine_runner.py
+          test -f dist/ProjectBridge.app/Contents/Resources/install_engine.sh
+          xcrun lipo -verify_arch "${{ matrix.arch }}" dist/ProjectBridge.app/Contents/MacOS/ProjectBridge
+      - name: Package ZIP
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent dist/ProjectBridge.app "ProjectBridge-macOS-${{ matrix.arch }}.zip"
+      - name: Upload downloadable app
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProjectBridge-macOS-${{ matrix.arch }}
+          path: ProjectBridge-macOS-${{ matrix.arch }}.zip
+          if-no-files-found: error
